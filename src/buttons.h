@@ -31,7 +31,7 @@ volatile uint8_t key_press;                                // key press detect
 volatile uint8_t key_rpt;
 
 
-ISR( TIMER0_OVF_vect );
+ISR( TIMER2_OVF_vect );
 
 ///////////////////////////////////////////////////////////////////
 //
