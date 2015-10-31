@@ -8,6 +8,8 @@
 #include "buttons.h"
 #include "typedefs.h"
 
+#define CHECK_INTERVAL_SECONDS 60
+
 #define setPin(PORT,PIN) PORT |= (1 << PIN)
 #define clearPin(PORT,PIN) PORT &= ~(1 << PIN)
 
@@ -40,6 +42,10 @@ volatile date_t current_date;
 volatile uint32_t time = 0;
 volatile boolean clk_run = false;
 volatile uint32_t current_bit_time = 0;
+
+volatile uint8_t checkInterval = 0;
+
+boolean timeReceived = false;
 
 enum Mode {
 	TIME,
@@ -152,6 +158,14 @@ ISR (TIMER0_OVF_vect) {
 
 ISR (TIMER1_COMPA_vect) {
 
+	if (checkInterval > 0) {
+		checkInterval--;
+	}
+	else {
+		checkInterval = CHECK_INTERVAL_SECONDS;
+		timeReceived = false;
+	}
+
 	if (current_date.second < 59) {
 		current_date.second++;
 		if (displayMode == TIME) {
@@ -186,6 +200,9 @@ ISR (TIMER1_COMPA_vect) {
 }
 
 ISR (INT1_vect) {
+
+	if (timeReceived)
+		return;
 
 	EIFR |= (1 << INTF1); // clear external interrupt flag
 
@@ -271,6 +288,7 @@ ISR (INT1_vect) {
 				current_date.month = tmp_date.month;
 				current_date.year = tmp_date.year;
 				current_date.day_of_week = tmp_date.day_of_week;
+				timeReceived = true;
 			}
 
 			tmp_date.minute = 0;
