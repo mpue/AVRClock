@@ -36,7 +36,6 @@ volatile uint8_t current_bit = 0;
 
 volatile date_t tmp_date;
 volatile date_t current_date;
-volatile date_t dcf_date;
 
 volatile uint32_t time = 0;
 volatile boolean clk_run = false;
@@ -44,10 +43,20 @@ volatile uint32_t current_bit_time = 0;
 
 enum Mode {
 	TIME,
-	ALARM
+	ALARM,
+	DATE
 };
 
 volatile enum Mode displayMode = TIME;
+
+boolean isValidTime(date_t time) {
+
+	if (time.hour < 24 && time.minute < 60 && time.second < 60 &&
+		time.day < 32 && time.month < 13)
+		return true;
+
+	return false;
+}
 
 void eval_dcf(void) {
 
@@ -250,28 +259,36 @@ ISR (INT1_vect) {
 			 * copy properties, clear all temp values and set sync flag to false;
 			 */
 			int1_select_rising_edge();
+
 			current_bit = 0;
 			current_date.second = 0;
-			current_date.minute = tmp_date.minute;
+
+			// set the time only if a valid time has been received
+			if (isValidTime(current_date)) {
+				current_date.minute = tmp_date.minute;
+				current_date.hour = tmp_date.hour;
+				current_date.day = tmp_date.day;
+				current_date.month = tmp_date.month;
+				current_date.year = tmp_date.year;
+				current_date.day_of_week = tmp_date.day_of_week;
+			}
+
 			tmp_date.minute = 0;
-			current_date.hour = tmp_date.hour;
 			tmp_date.hour = 0;
-			dcf_date.day = tmp_date.day;
-			dcf_date.month = tmp_date.month;
-			dcf_date.year = tmp_date.year;
-			dcf_date.day_of_week = tmp_date.day_of_week;
 			tmp_date.day_of_week = 0;
 			tmp_date.day = 0;
 			tmp_date.month = 0;
 			tmp_date.year = 0;
+
+			// now resync
 			sync = false;
 		}
 
 	}
+
 }
 
 void displayNumber(uint8_t num, boolean withDot) {
-
 
 	// turn all segments off
 	setPin(PORTC, 5);
@@ -453,10 +470,12 @@ int main(void) {
 
 		if (displayMode == TIME) {
 			displayTime(current_date.hour,current_date.minute,current_date.second,withDot);
-			// displayTime(hour,minute,second,withDot);
+		}
+		else if (displayMode == ALARM){
+			displayTime(al_hour,al_minute,al_second,withDot);
 		}
 		else {
-			displayTime(al_hour,al_minute,al_second,withDot);
+			displayTime(current_date.day,current_date.month,current_date.year,true);
 		}
 
 		if (get_key_rpt(1 << KEY0) || get_key_short(1 << KEY0)) {
@@ -496,9 +515,12 @@ int main(void) {
 				}
 			}
 		}
-		else if(get_key_long(1 << KEY2)) {
+		else if(get_key_short(1 << KEY2)) {
 			if (displayMode == TIME) {
 				displayMode = ALARM;
+			}
+			else if (displayMode == ALARM){
+				displayMode = DATE;
 			}
 			else {
 				displayMode = TIME;
