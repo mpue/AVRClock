@@ -10,6 +10,8 @@
 
 #define CHECK_INTERVAL_SECONDS 60
 
+// #define DCF77_ENABLED
+
 #define setPin(PORT,PIN) PORT |= (1 << PIN)
 #define clearPin(PORT,PIN) PORT &= ~(1 << PIN)
 
@@ -55,6 +57,8 @@ enum Mode {
 
 volatile enum Mode displayMode = TIME;
 
+
+#ifdef DCF77_ENABLED
 boolean isValidTime(date_t time) {
 
 	if (time.hour < 24 && time.minute < 60 && time.second < 60 &&
@@ -152,19 +156,14 @@ void eval_dcf(void) {
 
 }
 
+
 ISR (TIMER0_OVF_vect) {
 	time++;
 }
 
-ISR (TIMER1_COMPA_vect) {
+#endif
 
-	if (checkInterval > 0) {
-		checkInterval--;
-	}
-	else {
-		checkInterval = CHECK_INTERVAL_SECONDS;
-		timeReceived = false;
-	}
+ISR (TIMER1_COMPA_vect) {
 
 	if (current_date.second < 59) {
 		current_date.second++;
@@ -199,10 +198,8 @@ ISR (TIMER1_COMPA_vect) {
 
 }
 
+#ifdef DCF77_ENABLED
 ISR (INT1_vect) {
-
-	if (timeReceived)
-		return;
 
 	EIFR |= (1 << INTF1); // clear external interrupt flag
 
@@ -276,12 +273,11 @@ ISR (INT1_vect) {
 			 * copy properties, clear all temp values and set sync flag to false;
 			 */
 			int1_select_rising_edge();
-
 			current_bit = 0;
-			current_date.second = 0;
 
 			// set the time only if a valid time has been received
-			if (isValidTime(current_date)) {
+			if (isValidTime(tmp_date)) {
+				current_date.second = 0;
 				current_date.minute = tmp_date.minute;
 				current_date.hour = tmp_date.hour;
 				current_date.day = tmp_date.day;
@@ -305,6 +301,7 @@ ISR (INT1_vect) {
 	}
 
 }
+#endif
 
 void displayNumber(uint8_t num, boolean withDot) {
 
@@ -464,14 +461,19 @@ int main(void) {
 
 	initKeys();
 
+#ifdef DCF77_ENABLED
 	int1_enable();
 	int1_select_rising_edge();
+#endif
 
 	sei();
 
 	timer1_start_ctc(31250);
+
+#ifdef DCF77_ENABLED
 	timer0_enable_overflow_isr();
 	timer0_start_normal();
+#endif
 
 	while (1) {
 
@@ -492,10 +494,11 @@ int main(void) {
 		else if (displayMode == ALARM){
 			displayTime(al_hour,al_minute,al_second,withDot);
 		}
+#ifdef DCF77_ENABLED
 		else {
 			displayTime(current_date.day,current_date.month,current_date.year,true);
 		}
-
+#endif
 		if (get_key_rpt(1 << KEY0) || get_key_short(1 << KEY0)) {
 
 			if (displayMode == TIME) {
@@ -537,9 +540,11 @@ int main(void) {
 			if (displayMode == TIME) {
 				displayMode = ALARM;
 			}
+#ifdef DCF77_ENABLED
 			else if (displayMode == ALARM){
 				displayMode = DATE;
 			}
+#endif
 			else {
 				displayMode = TIME;
 			}
@@ -547,6 +552,9 @@ int main(void) {
 
 		if (alarmEnable && alarmRunning) {
 			setPin(PORTD,7);
+			_delay_ms(200);
+			clearPin(PORTD,7);
+			alarmRunning = false;
 		}
 
 	}
