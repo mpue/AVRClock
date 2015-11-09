@@ -1,5 +1,9 @@
 #define F_CPU 8000000UL
 
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 #include <avr/io.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
@@ -7,8 +11,13 @@
 #include "timer_ctrl.h"
 #include "buttons.h"
 #include "typedefs.h"
+#include "uart.h"
 
 #define CHECK_INTERVAL_SECONDS 60
+#define UART_BAUD_RATE      9600
+
+// maximum command length from serial
+#define MAX_LEN 16
 
 // #define DCF77_ENABLED
 
@@ -47,6 +56,11 @@ volatile uint32_t current_bit_time = 0;
 
 volatile uint8_t checkInterval = 0;
 
+char buffer[16];
+uint8_t charNum = 0;
+
+char num[3];
+
 boolean timeReceived = false;
 
 enum Mode {
@@ -57,8 +71,6 @@ enum Mode {
 
 volatile enum Mode displayMode = TIME;
 
-
-#ifdef DCF77_ENABLED
 boolean isValidTime(date_t time) {
 
 	if (time.hour < 24 && time.minute < 60 && time.second < 60 &&
@@ -67,6 +79,8 @@ boolean isValidTime(date_t time) {
 
 	return false;
 }
+
+#ifdef DCF77_ENABLED
 
 void eval_dcf(void) {
 
@@ -443,7 +457,111 @@ void initKeys(void) {
 	TIMSK2 |= 1 << TOIE2; // enable timer interrupt
 }
 
+void parseCommand(char* cmd, uint8_t len) {
+
+	if (strncmp(cmd,"time",4) == 0) {
+
+		char* t = &buffer[5];
+
+		uint16_t time   = atoi(t);
+
+		int hour = time / 100;
+		int minute = time - ((time / 100) * 100);
+
+		tmp_date.hour = hour;
+		tmp_date.minute = minute;
+		tmp_date.month = 1;
+		tmp_date.year = 0;
+		tmp_date.day = 1;
+
+		if (isValidTime(tmp_date)) {
+			current_date.hour = hour;
+			current_date.minute = minute;
+		}
+
+	}
+	else if(strncmp(cmd,"gettime",7) == 0) {
+		sprintf(buffer,"\r\n%02d:%02d",current_date.hour,current_date.minute);
+		uart_puts(buffer);
+	}
+
+}
+
+
+void getUart() {
+    /*
+     * Get received character from ringbuffer
+     * uart_getc() returns in the lower byte the received character and
+     * in the higher byte (bitmask) the last receive error
+     * UART_NO_DATA is returned when no data is available.
+     *
+     */
+    char c = uart_getc();
+
+    if ( c & UART_NO_DATA )
+    {
+        /*
+         * no data available from UART
+         */
+    }
+    else
+    {
+        /*
+         * new data available from UART
+         * check for Frame or Overrun error
+         */
+        if ( c & UART_FRAME_ERROR )
+        {
+            /* Framing Error detected, i.e no stop bit detected */
+            uart_puts_P("UART Frame Error: ");
+        }
+        if ( c & UART_OVERRUN_ERROR )
+        {
+            /*
+             * Overrun, a character already present in the UART UDR register was
+             * not read by the interrupt handler before the next character arrived,
+             * one or more received characters have been dropped
+             */
+            uart_puts_P("UART Overrun Error: ");
+        }
+        if ( c & UART_BUFFER_OVERFLOW )
+        {
+            /*
+             * We are not reading the receive buffer fast enough,
+             * one or more received character have been dropped
+             */
+            uart_puts_P("Buffer overflow error: ");
+        }
+
+        if (charNum < 16) {
+
+            if ((unsigned char)c == '\r') {
+
+            	parseCommand(buffer,charNum);
+
+            	uart_puts("\r\n");
+            	uart_puts("Ok.\r\n");
+
+            	charNum = 0;
+            }
+            else {
+            	if (isalnum(c) || isblank(c)) {
+					uart_putc(c);
+					buffer[charNum] = (unsigned char)c;
+					charNum++;
+            	}
+            }
+
+
+        }
+
+    }
+
+}
+
 int main(void) {
+
+	charNum = 0;
 
 	DDRB = 0xFF;
 	DDRC = 0xFF;
@@ -459,12 +577,23 @@ int main(void) {
 	// alarm trigger pin
 	setPin(DDRD,7);
 
+#ifdef EXTERNAL_BUTTONS
 	initKeys();
+#endif
 
 #ifdef DCF77_ENABLED
 	int1_enable();
 	int1_select_rising_edge();
 #endif
+
+    /*
+     *  Initialize UART library, pass baudrate and AVR cpu clock
+     *  with the macro
+     *  UART_BAUD_SELECT() (normal speed mode )
+     *  or
+     *  UART_BAUD_SELECT_DOUBLE_SPEED() ( double speed mode)
+     */
+    uart_init( UART_BAUD_SELECT(UART_BAUD_RATE,F_CPU) );
 
 	sei();
 
@@ -499,6 +628,8 @@ int main(void) {
 			displayTime(current_date.day,current_date.month,current_date.year,true);
 		}
 #endif
+
+#ifdef EXTERNAL_BUTTONS
 		if (get_key_rpt(1 << KEY0) || get_key_short(1 << KEY0)) {
 
 			if (displayMode == TIME) {
@@ -549,6 +680,8 @@ int main(void) {
 				displayMode = TIME;
 			}
 		}
+#endif
+		getUart();
 
 		if (alarmEnable && alarmRunning) {
 			setPin(PORTD,7);
