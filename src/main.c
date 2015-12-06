@@ -24,13 +24,21 @@
 #define setPin(PORT,PIN) PORT |= (1 << PIN)
 #define clearPin(PORT,PIN) PORT &= ~(1 << PIN)
 
-#define SEG_A clearPin(PORTB, 4)
-#define SEG_B clearPin(PORTC, 5)
-#define SEG_C clearPin(PORTC, 3)
-#define SEG_D clearPin(PORTC, 2)
-#define SEG_E clearPin(PORTB, 2)
-#define SEG_F clearPin(PORTB, 3)
-#define SEG_G clearPin(PORTC, 4)
+#define SEG_A clearPin(PORTB, 5)
+#define SEG_B clearPin(PORTC, 1)
+#define SEG_C clearPin(PORTB, 2)
+#define SEG_D clearPin(PORTB, 1)
+#define SEG_E clearPin(PORTB, 3)
+#define SEG_F clearPin(PORTB, 4)
+#define SEG_G clearPin(PORTC, 0)
+
+#define SEG_A_OFF setPin(PORTB, 5)
+#define SEG_B_OFF setPin(PORTC, 1)
+#define SEG_C_OFF setPin(PORTB, 2)
+#define SEG_D_OFF setPin(PORTB, 1)
+#define SEG_E_OFF setPin(PORTB, 3)
+#define SEG_F_OFF setPin(PORTB, 4)
+#define SEG_G_OFF setPin(PORTC, 0)
 
 #define SW_DELAY 2
 
@@ -320,20 +328,19 @@ ISR (INT1_vect) {
 void displayNumber(uint8_t num, boolean withDot) {
 
 	// turn all segments off
-	setPin(PORTC, 5);
-	setPin(PORTC, 4);
-	setPin(PORTC, 3);
-	setPin(PORTC, 2);
-	setPin(PORTB, 4);
-	setPin(PORTB, 3);
-	setPin(PORTB, 2);
-	setPin(PORTB, 1);
+	SEG_A_OFF;
+	SEG_B_OFF;
+	SEG_C_OFF;
+	SEG_D_OFF;
+	SEG_E_OFF;
+	SEG_F_OFF;
+	SEG_G_OFF;
 
 	if (withDot) {
-		clearPin(PORTB, 1);
+		clearPin(PORTB, 0);
 	}
 	else {
-		setPin(PORTB,1);
+		setPin(PORTB,0);
 	}
 
 	if (num == 0) {
@@ -419,31 +426,31 @@ void displayTime(int hours, int minutes, int seconds, boolean dot) {
 	int h_tenths = hours / 10;
 	int h_ones = hours - h_tenths * 10;
 
-	clearPin(PORTD,5);
-	clearPin(PORTD,6);
-	clearPin(PORTB,6);
-	setPin(PORTB,7);
+	clearPin(PORTC,2);
+	clearPin(PORTC,3);
+	clearPin(PORTC,4);
+	setPin(PORTC,5);
 	displayNumber(m_ones,false);
 	_delay_ms(SW_DELAY);
 
-	clearPin(PORTD,5);
-	clearPin(PORTD,6);
-	setPin(PORTB,6);
-	clearPin(PORTB,7);
+	clearPin(PORTC,2);
+	clearPin(PORTC,3);
+	setPin(PORTC,4);
+	clearPin(PORTC,5);
 	displayNumber(m_tenths,false);
 	_delay_ms(SW_DELAY);
 
-	clearPin(PORTB,6);
-	clearPin(PORTB,7);
-	clearPin(PORTD,5);
-	setPin(PORTD,6);
+	clearPin(PORTC,2);
+	setPin(PORTC,3);
+	clearPin(PORTC,4);
+	clearPin(PORTC,5);
 	displayNumber(h_ones,dot);
 	_delay_ms(SW_DELAY);
 
-	clearPin(PORTB,6);
-	clearPin(PORTB,7);
-	setPin(PORTD,5);
-	clearPin(PORTD,6);
+	setPin(PORTC,2);
+	clearPin(PORTC,3);
+	clearPin(PORTC,4);
+	clearPin(PORTC,5);
 	displayNumber(h_tenths,false);
 	_delay_ms(SW_DELAY);
 }
